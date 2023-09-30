@@ -1,0 +1,63 @@
+Manea Dorin-Mihai, 323CA
+Dataplane Router
+April, 2023
+
+This project is written in C and implements the dataplane of a router. It 
+deals with the forwarding process, Longest Prefix Match (LPM) problem and the
+ICMP protocol. The ARP table is parsed statically.
+
+I check if the frame is destined for the interface of the router it arrived at.
+If so, I check whether the packet is of type IP or ARP.
+
+For an IP packet, there are multiple aspects to take into consideration between
+further forwarding it. 
+If the checksum is wrong, the packet should be dropped. If the TTL is less or
+equal than 1, then the packet should also be dropped and a proper ICMP response 
+is sent back. Otherwise, I decrement the TTL and recompute the checksum, with 
+the checksum function.
+If the packet is destined for the router itself, it means it represents an ICMP
+Echo Request and I send back accordingly an ICMP Echo Reply. For parsing the IP
+address from dot format (char *) to uint32_t, I imported the arpa/inet.h 
+library for the inet_aton function and the in_addr structure. 
+Afterwards, I look for the best route in the routing table, utilising my LPM
+algorithm, and I get its MAC address from the ARP table. If either of the 
+tables does not contain the searched entry, I drop the packet. Moreover, I send
+back a proper ICMP error message if there is no way for the router to forward 
+the packet to the desired destination (i.e. no entry in the routing table).
+FInally, I update the source and destination MAC addresses and I forward the 
+packet.
+
+My LPM algorithm implementation consists first in sorting the routing table
+before receiving the packets, using the C function qsort for QuickSort 
+(average complexity - Θ(n * log n), worst case (very rare) - O(n ^ 2); 
+n represents the number of entries). I sort ascendingly by prefix and 
+descendingly by mask, because if there are multiple entries with the same
+prefix, then the entry with the longest mask should be chosen. This way, the
+most specific subnetwork will be found.
+Second, I perform a binary search on the table in average / worst case
+complexity log n.
+Final complexity: average case - Θ(n * log n), worst case - O(n ^ 2). This 
+could be further improved utilising a trie graph to O(L), where L represents
+the length of the key.
+
+For an ICMP Echo Reply, I perform some routine checks - if the packet really is
+of type ICMP Echo Request and if the checksum is correct. Then, I simply update
+the ICMP type field and recompute the checksum, still utilising the checksum
+function. Finally, I send back the reply.
+If the TTL was exceeded or the destination was unreachable, then a respective
+ICMP error message is also sent back. The only difference between the two 
+consists in the value of the type field. Other than that, I copy in an 
+auxiliary variable (data) the IP header and the first 64 bits (8 bytes) of the
+payload of the dropped packet for later identification by the host. Besides, I
+set the right MAC and IP addresses and the proper values for the ICMP header
+fields. The information stored in the data auxiliary variable is appended after
+the ICMP header. Finally, the packet is sent back to the host.
+
+One key aspect I had to keep track of during the project was the fact that the
+data received is stored in Network Order (Big Endian), while the computer 
+processor works on Host Order (Little Endian). For the conversion, I used the
+ntohs / ntohl and htons / htonl functions.
+Another little aspect that I had to take into consideration before computing a
+checksum was to set the checksum field of the IP / ICMP header beforehand.
+As it is always the case in C, special attention was given to allocating and
+deallocating dynamic memory properly.
